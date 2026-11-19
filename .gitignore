@@ -1,0 +1,9 @@
+.DS_Store
+# ESPHome
+software/secrets.yaml
+software/.esphome/
+# KiCad
+hardware/*.kicad_prl
+hardware/*-backups/
+hardware/~*.lck
+hardware/fp-info-cache

@@ -1,0 +1,220 @@
+# Treppenlicht – ESPHome-Konfiguration
+# Hardware: D1 mini ESP32, LED-Band 5 V über Low-Side-MOSFET (PWM),
+# zwei PIR-Bewegungsmelder (unten/oben), optionaler LDR (Helligkeit).
+# Schaltplan: ../hardware/treppenlicht.kicad_sch
+
+substitutions:
+  name: treppenlicht
+  friendly_name: Treppenlicht
+  # Pinbelegung (D1 mini ESP32: D5=GPIO18, D6=GPIO19, D7=GPIO23, A0=GPIO36)
+  pin_led: GPIO18
+  pin_pir_unten: GPIO19
+  pin_pir_oben: GPIO23
+  pin_ldr: GPIO36
+  # Strombudget: Netzteil 1 A, LED-Band < 0,7 A bei 100 %, ESP32 + PIR ~0,3 A.
+  # Daher standardmäßig max. 80 % Helligkeit (zur Laufzeit einstellbar).
+  max_helligkeit_default: "80"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${name}-fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+# ---------------------------------------------------------------- Ausgang / Licht
+output:
+  - platform: ledc
+    id: led_pwm
+    pin: ${pin_led}
+    frequency: 2000Hz      # flimmerfrei, MOSFET schaltet noch sauber
+
+light:
+  - platform: monochromatic
+    id: treppe
+    name: "Licht"
+    output: led_pwm
+    restore_mode: ALWAYS_OFF
+    gamma_correct: 2.2
+    default_transition_length: 1s
+
+# ---------------------------------------------------------------- Sensoren
+binary_sensor:
+  - platform: gpio
+    id: pir_unten
+    name: "Bewegung unten"
+    device_class: motion
+    pin:
+      number: ${pin_pir_unten}
+      mode: INPUT_PULLDOWN
+    filters:
+      - delayed_on: 100ms          # Störimpulse unterdrücken
+    on_press:
+      - script.execute: licht_automatik
+
+  - platform: gpio
+    id: pir_oben
+    name: "Bewegung oben"
+    device_class: motion
+    pin:
+      number: ${pin_pir_oben}
+      mode: INPUT_PULLDOWN
+    filters:
+      - delayed_on: 100ms
+    on_press:
+      - script.execute: licht_automatik
+
+  # "Dunkel" mit Hysterese, abgeleitet aus der LDR-Spannung
+  - platform: template
+    id: ist_dunkel
+    name: "Dunkel"
+    lambda: |-
+      float v = id(ldr_spannung).state;
+      if (isnan(v)) return {};
+      float s = id(dunkel_schwelle).state;
+      const float hyst = 0.2;
+      if (id(ist_dunkel).state) return v < (s + hyst);   // bleibt dunkel bis Schwelle+Hysterese
+      return v < (s - hyst);                              // wird dunkel unter Schwelle-Hysterese
+
+sensor:
+  - platform: adc
+    id: ldr_spannung
+    name: "Helligkeit (LDR-Spannung)"
+    pin: ${pin_ldr}
+    attenuation: 12db
+    update_interval: 2s
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    filters:
+      - sliding_window_moving_average:
+          window_size: 10
+          send_every: 5
+
+  - platform: wifi_signal
+    name: "WLAN-Signal"
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: uptime
+    name: "Laufzeit"
+    entity_category: diagnostic
+
+# ---------------------------------------------------------------- Einstellungen
+switch:
+  - platform: template
+    id: automatik
+    name: "Automatik"
+    icon: mdi:motion-sensor
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+  - platform: template
+    id: nur_dunkel
+    name: "Nur bei Dunkelheit"
+    icon: mdi:weather-night
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF   # ohne LDR aus lassen
+
+number:
+  - platform: template
+    id: max_helligkeit
+    name: "Max. Helligkeit"
+    icon: mdi:brightness-percent
+    optimistic: true
+    restore_value: true
+    initial_value: ${max_helligkeit_default}
+    min_value: 5
+    max_value: 100
+    step: 5
+    unit_of_measurement: "%"
+
+  - platform: template
+    id: nachlaufzeit
+    name: "Nachlaufzeit"
+    icon: mdi:timer-outline
+    optimistic: true
+    restore_value: true
+    initial_value: 30
+    min_value: 5
+    max_value: 600
+    step: 5
+    unit_of_measurement: "s"
+
+  - platform: template
+    id: dunkel_schwelle
+    name: "Dunkel-Schwelle (LDR-Spannung)"
+    icon: mdi:brightness-6
+    optimistic: true
+    restore_value: true
+    initial_value: 1.5
+    min_value: 0.1
+    max_value: 3.0
+    step: 0.1
+    unit_of_measurement: "V"
+
+button:
+  - platform: restart
+    name: "Neustart"
+    entity_category: config
+
+# ---------------------------------------------------------------- Ablauf
+globals:
+  - id: auto_aktiv
+    type: bool
+    initial_value: "false"
+
+script:
+  # Bewegung erkannt: Licht an, warten bis beide Melder frei sind,
+  # Nachlaufzeit abwarten, sanft ausblenden. Erneute Bewegung startet neu.
+  - id: licht_automatik
+    mode: restart
+    then:
+      - if:
+          condition:
+            and:
+              - switch.is_on: automatik
+              - or:
+                  - switch.is_off: nur_dunkel
+                  - binary_sensor.is_on: ist_dunkel
+              # manuell eingeschaltetes Licht nicht übernehmen
+              - or:
+                  - light.is_off: treppe
+                  - lambda: 'return id(auto_aktiv);'
+          then:
+            - lambda: 'id(auto_aktiv) = true;'
+            - light.turn_on:
+                id: treppe
+                brightness: !lambda 'return id(max_helligkeit).state / 100.0f;'
+                transition_length: 1s
+            - wait_until:
+                condition:
+                  and:
+                    - binary_sensor.is_off: pir_unten
+                    - binary_sensor.is_off: pir_oben
+                timeout: 10min
+            - delay: !lambda 'return (uint32_t) (id(nachlaufzeit).state * 1000);'
+            - light.turn_off:
+                id: treppe
+                transition_length: 3s
+            - lambda: 'id(auto_aktiv) = false;'

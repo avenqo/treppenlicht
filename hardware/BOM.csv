@@ -1,0 +1,20 @@
+Referenz,Anzahl,Bauteil,Wert,Gehäuse/Footprint,Hinweis
+U1,1,D1 mini ESP32 (Wemos/Lolin),,Steckleisten 2x8,ESPHome-Board wemos_d1_mini32
+Q1,1,N-Kanal Logic-Level-MOSFET,IRLZ44N,TO-220,Alternativen: IRLZ34N / IRLB8721 / AO3400A (SMD)
+R1,1,Widerstand,100 Ω,THT 0207,Gate-Vorwiderstand
+R2,1,Widerstand,10 kΩ,THT 0207,Gate-Pulldown
+R3,1,Widerstand,10 kΩ,THT 0207,LDR-Spannungsteiler (optional)
+R4,1,Fotowiderstand (LDR),GL5528,5 mm,optional
+D1,1,Schottky-Diode,1N5819,DO-41,Entkopplung MCU-Versorgung
+F1,1,PTC-Sicherung (rückstellend),1.1 A hold,Radial 5 mm,z. B. Bourns MF-R110 / Schwellstrom ~2.2 A
+C1,1,Elko,1000 µF / 10 V (bes. 16 V),Radial D8 mm P3.5,Pufferkondensator am LED-Anschluss
+C2,1,Keramikkondensator,100 nF,Rastermaß 5 mm,Abblocken
+J1,1,Schraubklemme 2-polig,RM 5.08,,Eingang vom Netzteil (alternativ Micro-USB/USB-C-Breakout mit Klemmen)
+J2,1,Schraubklemme 2-polig,RM 5.08,,LED-Streifen
+J3 J4,2,Stiftleiste 1x3 RM 2.54,,,PIR-Anschlüsse (Servo-Kabel)
+—,2,PIR-Bewegungsmelder,HC-SR501 (o. ä. 5 V / 3.3 V-Ausgang),,Montage unten und oben an der Treppe
+—,1,USB-Steckernetzteil 5 V / 1 A,,,vorhanden
+—,1,LED-Band 5 V einfarbig (Silikon/COB),,,vorhanden; < 0.7 A
+—,1,Lochrasterplatine,ca. 5x7 cm,,Aufbau
+—,1,Buchsenleisten 1x8 (2 Stück),RM 2.54,,für den D1 mini (optional)
+—,1,Leitungen,0.5 mm² für 5 V und LED,,Querschnitt wegen Spannungsabfall nicht zu klein

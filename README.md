@@ -47,16 +47,17 @@ Aufbau in Kürze:
   So kann man ihn am USB-Port flashen, ohne in die LED-Schiene zurückzuspeisen.
 - **Sensoren:** PIR-Melder (5 V, 3,3-V-Ausgang) an GPIO19 und GPIO23; LDR-Teiler an GPIO36.
 
-| Funktion | D1-mini-Pin | GPIO |
-|----------|-------------|------|
-| MOSFET-Gate (PWM) | D5 | 18 |
-| PIR unten | D6 | 19 |
-| PIR oben | D7 | 23 |
-| LDR (ADC) | A0 | 36 |
+| Funktion | Beschriftung auf dem Board | GPIO | Klassische D1-mini-Bezeichnung |
+|----------|----------------------------|------|--------------------------------|
+| MOSFET-Gate (PWM) | IO18 | 18 | D5 |
+| PIR unten | IO19 | 19 | D6 |
+| PIR oben | IO23 | 23 | D7 |
+| LDR (ADC) | SVP | 36 | A0 |
+| Versorgung 5 V / Masse | VCC / GND | – | 5V / G |
 
 > **Hinweise**
-> - Die Pin-Beschriftung (D5, D6, …) der D1-mini-ESP32-Klone ist nicht einheitlich.
->   Maßgeblich sind die GPIO-Nummern; bei abweichender Belegung `pin_*` in der YAML anpassen.
+> - Auf den D1-mini-ESP32-Klonen steht IO18, IO19, … statt D5, D6, …; die Beschriftung ist nicht
+>   einheitlich. Maßgeblich sind die GPIO-Nummern (SVP = GPIO36, nur Eingang); bei abweichender Belegung `pin_*` in der YAML anpassen.
 > - Strombudget: LED < 0,7 A + ESP32 + PIR ≈ 1 A. Deshalb Standard-Helligkeit 80 %, siehe [BOM.md](hardware/BOM.md).
 > - Die Schaltung läuft nur mit 5 V aus dem Netzteil. Keine Netzspannung im Aufbau.
 > - Der Schaltplan wurde mit KiCad 10 erstellt und per ERC geprüft (0 Fehler, 0 Warnungen).

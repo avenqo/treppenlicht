@@ -1,0 +1,134 @@
+# Flur Treppenlicht – ESPHome-Konfiguration (MQTT, Steuerung über openHAB)
+# Hardware: D1 mini ESP32, LED-Band 5 V über Low-Side-MOSFET (PWM),
+# PIR1 (unten) und LDR. PIR2 (oben) wird ignoriert.
+# Die Schaltlogik (Nachlauf, Dunkelheit, Automatik) übernimmt openHAB.
+# Schaltplan: ../hardware/treppenlicht.kicad_sch
+#
+# MQTT-Topics (Groß-/Kleinschreibung beachten):
+#   ${ort}/${name}/status               online/offline (Last Will)
+#   ${ort}/${name}/licht/set            0..100 (%), openHAB -> Gerät
+#   ${ort}/${name}/licht/state          0..100 (%), Gerät -> openHAB
+#   ${ort}/${name}/helligkeit/state     LDR-Spannung in V
+#   ${ort}/${name}/bewegung/state       ON / OFF (PIR1)
+
+substitutions:
+  name: flur-treppe
+  friendly_name: Flur Treppenlicht
+  ort: Hausflur
+  # Pinbelegung (D1 mini ESP32: D5=GPIO18, D6=GPIO19, A0=GPIO36)
+  pin_led: GPIO18
+  pin_pir: GPIO19
+  pin_ldr: GPIO36
+  # Strombudget: Netzteil 1 A, LED-Band < 0,7 A bei 100 %.
+  # openHAB sollte daher 80 % nicht dauerhaft überschreiten.
+  topic: ${ort}/${name}
+  # MQTT-Zugang (Werte stehen in secrets.yaml)
+  mqtt_broker: !secret mqtt_broker
+  mqtt_user: !secret mqtt_user
+  mqtt_password: !secret mqtt_password
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: esp-idf
+
+logger:
+
+mqtt:
+  broker: ${mqtt_broker}
+  username: ${mqtt_user}
+  password: ${mqtt_password}
+  topic_prefix: ${topic}
+  discovery: false          # openHAB nutzt manuell angelegte MQTT-Things
+
+api:                        # zusätzlich zu MQTT: Wireless-Logs im Device Builder
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${name}-fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+# ---------------------------------------------------------------- Ausgang / Licht
+output:
+  - platform: ledc
+    id: led_pwm
+    pin: ${pin_led}
+    frequency: 2000Hz      # flimmerfrei, MOSFET schaltet noch sauber
+
+light:
+  - platform: monochromatic
+    id: treppe
+    name: "Licht intern"
+    internal: true          # nur über die Zahl "Licht" (0..100 %) steuerbar
+    output: led_pwm
+    restore_mode: ALWAYS_OFF
+    gamma_correct: 2.2
+    default_transition_length: 1s
+
+number:
+  - platform: template
+    id: licht_prozent
+    name: "Licht"
+    icon: mdi:led-strip-variant
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    optimistic: true
+    initial_value: 0
+    restore_value: false
+    command_topic: ${topic}/licht/set
+    state_topic: ${topic}/licht/state
+    set_action:
+      - if:
+          condition:
+            lambda: 'return x < 1;'
+          then:
+            - light.turn_off:
+                id: treppe
+          else:
+            - light.turn_on:
+                id: treppe
+                brightness: !lambda 'return x / 100.0f;'
+
+# ---------------------------------------------------------------- Sensoren
+binary_sensor:
+  - platform: gpio
+    id: pir1
+    name: "Bewegung"
+    device_class: motion
+    state_topic: ${topic}/bewegung/state
+    pin:
+      number: ${pin_pir}
+      mode: INPUT_PULLDOWN
+    filters:
+      - delayed_on: 100ms          # Störimpulse unterdrücken
+
+sensor:
+  - platform: adc
+    id: ldr_spannung
+    name: "Helligkeit"
+    state_topic: ${topic}/helligkeit/state
+    pin: ${pin_ldr}
+    attenuation: 12db
+    update_interval: 2s
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    filters:
+      - sliding_window_moving_average:
+          window_size: 10
+          send_every: 5
